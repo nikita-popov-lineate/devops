@@ -1,0 +1,154 @@
+---
+- hosts: all
+  become: true
+  vars:
+    student_password: $1$/BdIsI5x$EWEF9H506FhQuAzxbK.a7/
+    ftp_password: $1$TFeH2L0s$TiNvRFJTa1ceurccdUX/m.
+    container_name: ansible_
+  
+  tasks:
+    - debug: var=ansible_processor_cores
+
+    - name: Add user student
+      user:
+        name: student
+        password: "{{ student_password }}"
+
+    - name: Install required system packages
+      apt:
+        name: nginx
+        state: latest
+        update_cache: yes
+
+    - name: example copying file with owner and permissions
+      copy:
+        src: text.txt
+        dest: /home/student/text
+        owner: student
+        group: student
+        mode: 0600
+
+    - name: Remove file
+      file:
+        path: /home/student/text
+        state: absent
+
+    - name: Remove the user 'student'
+      user:
+        name: student
+        state: absent
+        remove: yes
+
+    - name: Remove nginx
+      apt:
+        pkg: nginx
+        state: absent
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu xenial stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt:
+        update_cache: yes
+        name: "docker.io"
+        state: latest
+
+    - name: Create containers
+      docker_container:
+        name: "{{ container_name }}{{ item }}"
+        image: "{{ item }}"
+        state: present
+      with_items:
+        - nginx
+        - tomcat
+        - debian
+
+    - name: Check bin false
+      lineinfile:
+        path: /etc/shells
+        regexp: "^/bin/false"
+        line: "/bin/false"
+        state: present
+
+    - name: Install vsftpd
+      apt:
+        name: vsftpd
+        update_cache: no
+        state: present
+
+    - name: Creat dir /srv/ftp
+      file:
+        path: /srv/ftp
+        state: directory
+        owner: root
+        group: root
+        mode: 0555
+        recurse: yes
+
+    - name: Add user ftp_user
+      user:
+        name: ftp_user
+        group: ftp
+        shell: /bin/false
+        home: /srv/ftp
+        password: "{{ ftp_password }}"
+        state: present
+
+    - name: Add /srv/ftp/output and change owner
+      file:
+        path: /srv/ftp/output
+        state: directory
+        owner: ftp_user
+        group: ftp
+        mode: 0770
+        recurse: yes
+
+    - name: Remove old vsftpd.conf
+      file:
+        path: /etc/vsftpd.conf
+        state: absent
+
+    - name: Create new vsftpd.conf
+      blockinfile:
+        path: /etc/vsftpd.conf
+        create: yes
+        marker: ""
+        block: |
+          listen=YES
+          ftpd_banner=Welcome for LevelUP
+          anonymous_enable=NO
+          local_enable=YES
+          write_enable=YES
+          dirmessage_enable=YES
+          use_localtime=YES
+          xferlog_enable=YES
+          connect_from_port_20=YES
+          chroot_local_user=YES
+          allow_writeable_chroot=YES
+          write_enable=YES
+          secure_chroot_dir=/var/run/vsftpd/empty
+          pam_service_name=vsftpd
+          rsa_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+
+    - name: chown for /etc/vsftpd.conf
+      file:
+        path: /etc/vsftpd.conf
+        owner: root
+        group: root
+
+    - name: Restart vsftpd
+      service:
+        name: vsftpd
+        state: restarted
+
+    - name: Make sure vsftpd is running
+      systemd:
+        state: started
+        name: vsftpd

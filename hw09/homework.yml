@@ -1,0 +1,36 @@
+---
+- hosts: all
+  become: true
+  vars:
+    student_password: $1$/BdIsI5x$EWEF9H506FhQuAzxbK.a7/
+
+  tasks:
+    - name: Install required system packages
+      apt:
+        name: "{{ item }}"
+        state: latest
+        update_cache: yes
+      with_items:
+        - apt-transport-https
+        - nginx
+        - nano
+        - vsftpd
+
+    - name: Add user student
+      user:
+        name: student
+        password: "{{ student_password }}"
+
+    - name: Create student directories
+      file:
+        path: "/home/student/lesson{{ item }}"
+        state: directory
+      with_items:
+        - 1
+        - 2
+        - 3
+        - 4
+
+    - debug: var=ansible_all_ipv4_addresses
+    - debug: var=ansible_product_name
+    - debug: var=ansible_processor_cores
